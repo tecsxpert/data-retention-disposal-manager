@@ -50,6 +50,7 @@ services:
       MAIL_PORT: ${MAIL_PORT:-587}
       MAIL_USERNAME: ${MAIL_USERNAME:-}
       MAIL_PASSWORD: ${MAIL_PASSWORD:-}
+      AI_SERVICE_URL: http://ai-service:5000
     depends_on:
       postgres:
         condition: service_healthy

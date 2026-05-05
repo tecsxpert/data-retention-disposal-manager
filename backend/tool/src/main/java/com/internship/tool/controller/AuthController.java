@@ -12,6 +12,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -81,6 +82,32 @@ public class AuthController {
                 "token", token,
                 "username", user.getUsername(),
                 "role", user.getRole()
+        ));
+    }
+
+    @PostMapping("/refresh")
+    @Operation(summary = "Refresh JWT token using a valid existing token")
+    public ResponseEntity<Map<String, String>> refresh(
+            @RequestHeader(name = "Authorization", required = false) String authHeader) {
+
+        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(Map.of("error", "Missing or invalid Authorization header"));
+        }
+
+        String token = authHeader.substring(7);
+        if (!jwtUtil.isTokenValid(token)) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(Map.of("error", "Token is invalid or expired"));
+        }
+
+        String username = jwtUtil.extractUsername(token);
+        String role = jwtUtil.extractRole(token);
+        String newToken = jwtUtil.generateToken(username, role);
+        return ResponseEntity.ok(Map.of(
+                "token", newToken,
+                "username", username,
+                "role", role
         ));
     }
 

@@ -87,6 +87,12 @@ public class DataRecordController {
        return ResponseEntity.ok(Map.of("message", "Record permanently removed"));
     }
 
+    @PostMapping("/{id}/analyze")
+    @Operation(summary = "Analyze a record with AI and store the result")
+    public ResponseEntity<DataRecordResponse> analyzeRecord(@PathVariable Long id) {
+        return ResponseEntity.ok(dataRecordService.analyzeRecord(id));
+    }
+
     @GetMapping("/search")
     @Operation(summary = "Search records by keyword")
     public ResponseEntity<Page<DataRecordResponse>> searchRecords(

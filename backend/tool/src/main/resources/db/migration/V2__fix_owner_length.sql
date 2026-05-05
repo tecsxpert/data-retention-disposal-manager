@@ -1,0 +1,1 @@
+ALTER TABLE data_records ALTER COLUMN owner TYPE VARCHAR(200);

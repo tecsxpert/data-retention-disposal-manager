@@ -36,4 +36,7 @@ public interface DataRecordRepository extends JpaRepository<DataRecord, Long> {
 
     // Stats: count all active records
     long countByIsDeletedFalse();
+
+    // Stats: count soft-deleted (disposed) records
+    long countByIsDeletedTrue();
 }

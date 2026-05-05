@@ -8,13 +8,15 @@ import com.internship.tool.exception.ValidationException;
 import com.internship.tool.repository.DataRecordRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.cache.annotation.Caching;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.client.RestTemplate;
 
 import java.time.LocalDate;
 import java.util.Map;
@@ -25,6 +27,10 @@ import java.util.Map;
 public class DataRecordService {
 
     private final DataRecordRepository dataRecordRepository;
+    private final RestTemplate restTemplate;
+
+    @Value("${ai.service.url:http://localhost:5000}")
+    private String aiServiceUrl;
 
     public Page<DataRecordResponse> getAllRecords(Pageable pageable) {
         return dataRecordRepository
@@ -135,7 +141,7 @@ public class DataRecordService {
         long total = dataRecordRepository.countByIsDeletedFalse();
         long active = dataRecordRepository.countByStatusAndIsDeletedFalse("ACTIVE");
         long expiring = dataRecordRepository.countByStatusAndIsDeletedFalse("EXPIRING");
-        long disposed = dataRecordRepository.countByStatusAndIsDeletedFalse("DISPOSED");
+        long disposed = dataRecordRepository.countByIsDeletedTrue();
 
         return Map.of(
                 "total", total,
@@ -143,6 +149,48 @@ public class DataRecordService {
                 "expiring", expiring,
                 "disposed", disposed
         );
+    }
+
+    @Transactional
+    @Caching(evict = {
+        @CacheEvict(value = "records", key = "#id"),
+        @CacheEvict(value = "stats", allEntries = true)
+    })
+    public DataRecordResponse analyzeRecord(Long id) {
+        DataRecord record = dataRecordRepository
+                .findByIdAndIsDeletedFalse(id)
+                .orElseThrow(() -> new ResourceNotFoundException("DataRecord", id));
+
+        try {
+            Map<String, Object> payload = Map.of(
+                    "id", record.getId(),
+                    "name", record.getName(),
+                    "dataType", record.getDataType(),
+                    "department", record.getDepartment() != null ? record.getDepartment() : "",
+                    "retentionYears", record.getRetentionYears(),
+                    "expiryDate", record.getExpiryDate().toString(),
+                    "status", record.getStatus()
+            );
+
+            @SuppressWarnings("unchecked")
+            Map<String, Object> aiResponse = restTemplate.postForObject(
+                    aiServiceUrl + "/analyze", payload, Map.class);
+
+            if (aiResponse != null) {
+                String aiDescription = (String) aiResponse.get("aiDescription");
+                Double aiScore = aiResponse.get("aiScore") instanceof Number
+                        ? ((Number) aiResponse.get("aiScore")).doubleValue() : 0.0;
+                record.setAiDescription(aiDescription);
+                record.setAiScore(aiScore);
+                dataRecordRepository.save(record);
+                log.info("AI analysis completed for record id: {}", id);
+            }
+        } catch (Exception e) {
+            log.warn("AI service unavailable for record {}: {}", id, e.getMessage());
+        }
+
+        return toResponse(dataRecordRepository.findByIdAndIsDeletedFalse(id)
+                .orElseThrow(() -> new ResourceNotFoundException("DataRecord", id)));
     }
 
     @Transactional

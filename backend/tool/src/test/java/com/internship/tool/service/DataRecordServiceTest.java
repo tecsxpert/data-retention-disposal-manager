@@ -14,6 +14,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.web.client.RestTemplate;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -28,6 +29,9 @@ class DataRecordServiceTest {
 
     @Mock
     private DataRecordRepository dataRecordRepository;
+
+    @Mock
+    private RestTemplate restTemplate;
 
     @InjectMocks
     private DataRecordService dataRecordService;
@@ -153,6 +157,15 @@ class DataRecordServiceTest {
     }
 
     @Test
+    void updateRecord_missingRecord_throwsException() {
+        when(dataRecordRepository.findByIdAndIsDeletedFalse(99L))
+                .thenReturn(Optional.empty());
+
+        assertThrows(ResourceNotFoundException.class,
+                () -> dataRecordService.updateRecord(99L, sampleRequest));
+    }
+
+    @Test
     void searchRecords_emptyQuery_returnsAllRecords() {
         Page<DataRecord> page = new PageImpl<>(List.of(sampleRecord));
         when(dataRecordRepository.findByIsDeletedFalse(any())).thenReturn(page);
@@ -164,15 +177,47 @@ class DataRecordServiceTest {
     }
 
     @Test
+    void searchRecords_withQuery_callsSearchByQuery() {
+        Page<DataRecord> page = new PageImpl<>(List.of(sampleRecord));
+        when(dataRecordRepository.searchByQuery(eq("customer"), any()))
+                .thenReturn(page);
+
+        Page<DataRecordResponse> result = dataRecordService
+                .searchRecords("customer", PageRequest.of(0, 10));
+
+        assertEquals(1, result.getTotalElements());
+        verify(dataRecordRepository).searchByQuery(eq("customer"), any());
+    }
+
+    @Test
+    void permanentDelete_existingRecord_deletesFromDb() {
+        when(dataRecordRepository.findById(1L)).thenReturn(Optional.of(sampleRecord));
+
+        dataRecordService.permanentDelete(1L);
+
+        verify(dataRecordRepository).delete(sampleRecord);
+    }
+
+    @Test
+    void permanentDelete_missingRecord_throwsException() {
+        when(dataRecordRepository.findById(99L)).thenReturn(Optional.empty());
+
+        assertThrows(ResourceNotFoundException.class,
+                () -> dataRecordService.permanentDelete(99L));
+    }
+
+    @Test
     void getStats_returnsCorrectCounts() {
         when(dataRecordRepository.countByIsDeletedFalse()).thenReturn(10L);
         when(dataRecordRepository.countByStatusAndIsDeletedFalse("ACTIVE")).thenReturn(7L);
         when(dataRecordRepository.countByStatusAndIsDeletedFalse("EXPIRING")).thenReturn(2L);
-        when(dataRecordRepository.countByStatusAndIsDeletedFalse("DISPOSED")).thenReturn(1L);
+        when(dataRecordRepository.countByIsDeletedTrue()).thenReturn(1L);
 
         var stats = dataRecordService.getStats();
 
         assertEquals(10L, stats.get("total"));
         assertEquals(7L, stats.get("active"));
+        assertEquals(2L, stats.get("expiring"));
+        assertEquals(1L, stats.get("disposed"));
     }
 }

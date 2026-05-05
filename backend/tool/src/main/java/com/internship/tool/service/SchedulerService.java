@@ -7,6 +7,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -22,8 +23,8 @@ public class SchedulerService {
     @Value("${spring.mail.username}")
     private String adminEmail;
 
-    // Runs every day at 8:00 AM
     @Scheduled(cron = "0 0 8 * * *")
+    @Transactional
     public void sendDailyExpiryReminder() {
         log.info("Running daily expiry check scheduler...");
 

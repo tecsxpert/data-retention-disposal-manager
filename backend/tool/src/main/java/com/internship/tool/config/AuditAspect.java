@@ -42,6 +42,15 @@ public class AuditAspect {
         auditLogService.log("DataRecord", id, "DELETE", user, "Record soft-deleted");
     }
 
+    @AfterReturning(
+        pointcut = "execution(* com.internship.tool.service.DataRecordService.permanentDelete(..))"
+    )
+    public void logPermanentDelete(JoinPoint joinPoint) {
+        String user = getCurrentUser();
+        Long id = (Long) joinPoint.getArgs()[0];
+        auditLogService.log("DataRecord", id, "PERMANENT_DELETE", user, "Record permanently deleted");
+    }
+
     private void logAction(String action, Object result) {
         try {
             String user = getCurrentUser();

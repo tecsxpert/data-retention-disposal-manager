@@ -54,6 +54,10 @@ springdoc:
   swagger-ui:
     path: /swagger-ui.html
 
+ai:
+  service:
+    url: ${AI_SERVICE_URL:http://localhost:5000}
+
 logging:
   level:
     com.internship.tool: INFO
