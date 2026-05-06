@@ -1,86 +1,111 @@
-# Import Blueprint and request
 from flask import Blueprint, request
 
-# Create blueprint
-recommend_bp = Blueprint('recommend', __name__)
+from services.ai_cache import cached_json
+from services.groq_client import groq_client
+from services.json_utils import parse_json_response
+from services.validation import validate_payload
 
 
-# Create POST endpoint
-@recommend_bp.route('/recommend', methods=['POST'])
-def recommend():
+recommend_bp = Blueprint("recommend", __name__)
 
-    # Read JSON input
-    data = request.get_json()
 
-    # Validate request body
-    if not data:
-        return {"error": "Request body is required"}, 400
+def fallback_recommendations(payload):
+    record_type = payload["recordType"]
+    retention_period = payload["retentionPeriod"]
+    risk_level = payload["riskLevel"]
 
-    # Extract values
-    record_type = data.get("recordType")
-    retention_period = data.get("retentionPeriod")
-    risk_level = data.get("riskLevel")
-
-    # Validate fields
-    if not record_type or not retention_period or not risk_level:
-        return {"error": "recordType, retentionPeriod and riskLevel are required"}, 400
-
-    # 🔥 Dynamic logic based on risk level
     if risk_level == "High":
-        recommendations = [
+        return [
             {
                 "action_type": "Encrypt",
                 "description": f"Encrypt {record_type} to protect sensitive information.",
-                "priority": "High"
+                "priority": "High",
             },
             {
                 "action_type": "Strict Access Control",
                 "description": "Limit access to authorized personnel only.",
-                "priority": "High"
+                "priority": "High",
             },
             {
                 "action_type": "Secure Deletion",
                 "description": f"Ensure secure deletion after {retention_period}.",
-                "priority": "High"
-            }
+                "priority": "High",
+            },
         ]
 
-    elif risk_level == "Medium":
-        recommendations = [
+    if risk_level == "Medium":
+        return [
             {
                 "action_type": "Archive",
                 "description": f"Archive {record_type} securely during retention period.",
-                "priority": "Medium"
+                "priority": "Medium",
             },
             {
                 "action_type": "Periodic Review",
                 "description": "Review data regularly for compliance.",
-                "priority": "Medium"
+                "priority": "Medium",
             },
             {
                 "action_type": "Delete",
                 "description": f"Delete data after {retention_period}.",
-                "priority": "Low"
-            }
+                "priority": "Low",
+            },
         ]
 
-    else:  # Low risk
-        recommendations = [
-            {
-                "action_type": "Store",
-                "description": f"Store {record_type} with basic protection.",
-                "priority": "Low"
-            },
-            {
-                "action_type": "Minimal Monitoring",
-                "description": "Monitor data usage occasionally.",
-                "priority": "Low"
-            },
-            {
-                "action_type": "Delete",
-                "description": f"Delete data after {retention_period}.",
-                "priority": "Low"
-            }
-        ]
+    return [
+        {
+            "action_type": "Store",
+            "description": f"Store {record_type} with basic protection.",
+            "priority": "Low",
+        },
+        {
+            "action_type": "Minimal Monitoring",
+            "description": "Monitor data usage occasionally.",
+            "priority": "Low",
+        },
+        {
+            "action_type": "Delete",
+            "description": f"Delete data after {retention_period}.",
+            "priority": "Low",
+        },
+    ]
 
-    return recommendations
+
+def is_valid_recommendation_list(value, payload):
+    retention_period = payload["retentionPeriod"].lower()
+    if not isinstance(value, list) or len(value) != 3:
+        return False
+
+    for item in value:
+        if not isinstance(item, dict):
+            return False
+        if not {"action_type", "description", "priority"} <= set(item):
+            return False
+        if item["action_type"] not in {"Archive", "Review", "Delete", "Encrypt", "Strict Access Control", "Secure Deletion", "Store", "Minimal Monitoring", "Periodic Review"}:
+            return False
+        if item["priority"] not in {"High", "Medium", "Low"}:
+            return False
+        if "delete" in item["description"].lower() and retention_period not in item["description"].lower():
+            return False
+
+    return True
+
+
+@recommend_bp.route("/recommend", methods=["POST"])
+def recommend():
+    payload, error = validate_payload(request.get_json(silent=True))
+    if error:
+        return error
+
+    def build_response():
+        generated = groq_client.generate("recommend", payload)
+        if generated:
+            try:
+                parsed = parse_json_response(generated)
+                if is_valid_recommendation_list(parsed, payload):
+                    return parsed
+            except ValueError:
+                pass
+        return fallback_recommendations(payload)
+
+    return cached_json("recommend", payload, build_response)

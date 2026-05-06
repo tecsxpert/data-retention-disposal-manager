@@ -1,42 +1,32 @@
-from flask import Blueprint, request
 from datetime import datetime
 
-# Import cache from extensions (NOT app)
-from extensions import cache
+from flask import Blueprint, request
 
-describe_bp = Blueprint('describe', __name__)
+from services.ai_cache import cached_json
+from services.groq_client import groq_client
+from services.validation import validate_payload
 
-@describe_bp.route('/describe', methods=['POST'])
-@cache.cached(timeout=60,key_prefix=lambda: request.get_data())
+
+describe_bp = Blueprint("describe", __name__)
+
+
+@describe_bp.route("/describe", methods=["POST"])
 def describe():
+    payload, error = validate_payload(request.get_json(silent=True))
+    if error:
+        return error
 
-    data = request.get_json()
-
-    if not data:
-        return {"error": "Request body is required"}, 400
-
-    record_type = data.get("recordType")
-    retention_period = data.get("retentionPeriod")
-    risk_level = data.get("riskLevel")
-
-    if not record_type or not retention_period or not risk_level:
-        return {"error": "Missing fields"}, 400
-
-    try:
-        description = (
-            f"{record_type} with {risk_level} risk should be securely retained for "
-            f"{retention_period} before disposal."
+    def build_response():
+        generated = groq_client.generate("describe", payload)
+        is_fallback = generated is None
+        description = generated or (
+            f"{payload['recordType']} with {payload['riskLevel']} risk should be securely retained for "
+            f"{payload['retentionPeriod']} before approved disposal."
         )
-
         return {
             "description": description,
             "generated_at": datetime.utcnow().isoformat(),
-            "is_fallback": False
+            "is_fallback": is_fallback,
         }
 
-    except Exception:
-        return {
-            "description": "AI service unavailable",
-            "generated_at": datetime.utcnow().isoformat(),
-            "is_fallback": True
-        }
+    return cached_json("describe", payload, build_response)

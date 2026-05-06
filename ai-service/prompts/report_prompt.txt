@@ -9,5 +9,8 @@ Generate a structured JSON report with the following fields:
 
 Ensure:
 - Output is valid JSON
+- Return only the JSON object, with no markdown code fence
+- Use the exact record type, retention period and risk level from the input
+- Do not invent or change the retention period
 - No extra explanation outside JSON
 - Content is professional and concise

@@ -7,4 +7,10 @@ Each recommendation must contain:
 - description (clear explanation)
 - priority (High / Medium / Low)
 
+Rules:
+- Use the exact record type from the input
+- Use the exact retention period from the input
+- Do not invent a different retention period
+- Delete recommendations must mention the exact retention period from the input
+
 Return ONLY valid JSON. Do not add explanation or extra text.

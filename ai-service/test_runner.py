@@ -1,16 +1,24 @@
 import requests
+
 from test_data import test_inputs
+
 
 BASE_URL = "http://127.0.0.1:5000"
 
-for data in test_inputs:
-    print("\nTesting:", data)
 
-    r1 = requests.post(f"{BASE_URL}/describe", json=data)
-    print("Describe:", r1.json())
+def main():
+    for data in test_inputs:
+        print("\nTesting:", data)
 
-    r2 = requests.post(f"{BASE_URL}/recommend", json=data)
-    print("Recommend:", r2.json())
+        describe_response = requests.post(f"{BASE_URL}/describe", json=data, timeout=10)
+        print("Describe:", describe_response.json())
 
-    r3 = requests.post(f"{BASE_URL}/generate-report", json=data)
-    print("Report:", r3.json())
+        recommend_response = requests.post(f"{BASE_URL}/recommend", json=data, timeout=10)
+        print("Recommend:", recommend_response.json())
+
+        report_response = requests.post(f"{BASE_URL}/generate-report", json=data, timeout=10)
+        print("Report:", report_response.json())
+
+
+if __name__ == "__main__":
+    main()
