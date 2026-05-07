@@ -1,95 +1,105 @@
-# Import Blueprint and request
-from flask import Blueprint, request
-
-# Import datetime for timestamp
+from flask import Blueprint, request, jsonify
 from datetime import datetime
+from services.groq_client import GroqClient
+import os
+import json
+import re
 
-# Create blueprint
 report_bp = Blueprint('report', __name__)
 
+@report_bp.route('/report', methods=['POST'])
+def report():
 
-# Create POST endpoint
-@report_bp.route('/generate-report', methods=['POST'])
-def generate_report():
+    data = request.get_json(silent=True)
 
-    # Read request JSON
-    data = request.get_json()
-
-    # Validate input
     if not data:
-        return {"error": "Request body is required"}, 400
+        return jsonify({"error": "Request body is required"}), 400
 
-    # Extract fields
     record_type = data.get("recordType")
     retention_period = data.get("retentionPeriod")
     risk_level = data.get("riskLevel")
 
-    # Validate fields
     if not record_type or not retention_period or not risk_level:
-        return {
+        return jsonify({
             "error": "recordType, retentionPeriod and riskLevel are required"
-        }, 400
+        }), 400
 
     try:
-        # 🔥 Dynamic report generation
-
-        title = f"{record_type} Retention Report"
-
-        summary = (
-            f"{record_type} requires careful handling due to its {risk_level} risk level."
+        # -------------------------------
+        # Load prompt
+        # -------------------------------
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        prompt_path = os.path.normpath(
+            os.path.join(base_dir, "..", "prompts", "report_prompt.txt")
         )
 
-        overview = (
-            f"{record_type} should be securely retained for {retention_period} "
-            f"and managed according to compliance standards."
+        if not os.path.exists(prompt_path):
+            return jsonify({"error": "Prompt file not found"}), 500
+
+        with open(prompt_path, "r", encoding="utf-8") as file:
+            prompt_template = file.read()
+
+        prompt = prompt_template.format(
+            record_type=record_type,
+            retention_period=retention_period,
+            risk_level=risk_level
         )
 
-        key_items = [
-            f"Record Type: {record_type}",
-            f"Retention Period: {retention_period}",
-            f"Risk Level: {risk_level}"
-        ]
+        # -------------------------------
+        # Call AI
+        # -------------------------------
+        groq_client = GroqClient()
+        ai_response = groq_client.generate_response(prompt)
 
-        # Dynamic recommendations based on risk
-        if risk_level == "High":
-            recommendations = [
-                "Apply strict access control policies",
-                "Encrypt sensitive data at rest and in transit",
-                f"Ensure secure deletion after {retention_period}"
-            ]
+        if not ai_response.get("success"):
+            return jsonify({
+                "description": "AI service unavailable",
+                "recommendations": [],
+                "generated_at": datetime.utcnow().isoformat(),
+                "is_fallback": True
+            }), 200
 
-        elif risk_level == "Medium":
-            recommendations = [
-                "Archive data securely",
-                "Perform periodic compliance reviews",
-                f"Delete data after {retention_period}"
-            ]
+        raw_text = ai_response.get("data", "").strip()
 
-        else:  # Low risk
-            recommendations = [
-                "Store data with basic protection",
-                "Monitor usage occasionally",
-                f"Delete data after {retention_period}"
-            ]
+        # Debug (optional but useful)
+        print("AI RESPONSE:", raw_text)
 
+        # -------------------------------
+        # Clean AI response
+        # -------------------------------
+        cleaned = re.sub(r"```json|```", "", raw_text).strip()
+
+        # -------------------------------
+        # Safe JSON parsing
+        # -------------------------------
+        try:
+            parsed = json.loads(cleaned)
+        except Exception as parse_error:
+            print("PARSE ERROR:", str(parse_error))
+
+            return jsonify({
+                "description": "AI returned invalid JSON",
+                "recommendations": [],
+                "generated_at": datetime.utcnow().isoformat(),
+                "is_fallback": True
+            }), 200   # changed from 500 → safe fallback
+
+        # -------------------------------
         # Final response
-        report = {
-            "title": title,
-            "summary": summary,
-            "overview": overview,
-            "key_items": key_items,
-            "recommendations": recommendations
-        }
-
-        return {
-            "report": report,
+        # -------------------------------
+        return jsonify({
+            "description": parsed.get("description"),
+            "recommendations": parsed.get("recommendations", []),
             "generated_at": datetime.utcnow().isoformat(),
             "is_fallback": False
-        }
+        }), 200
 
-    except Exception:
-        return {
-            "report": {},
+    except Exception as e:
+        print("ERROR:", str(e))
+
+        return jsonify({
+            "description": "Unexpected error occurred",
+            "recommendations": [],
             "generated_at": datetime.utcnow().isoformat(),
             "is_fallback": True
-        }
+        }), 500

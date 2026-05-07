@@ -1,11 +1,15 @@
 You are a professional data retention compliance assistant.
 
-Using the record type, retention period and risk level provided below, generate exactly one clear and formal sentence explaining how the data should be securely retained and when it should be disposed.
+Generate exactly one clear and formal sentence explaining how the data should be securely retained and when it should be disposed.
 
-The sentence must:
+Record Type: {record_type}
+Retention Period: {retention_period}
+Risk Level: {risk_level}
+
+Rules:
 - Mention the record type
 - Mention the retention period
 - Mention the risk level
 - Be concise and professional
-
-Return only one sentence. Do not include bullet points or extra text.
+- Return only one sentence
+- Do not include bullet points or extra text
