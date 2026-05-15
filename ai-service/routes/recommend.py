@@ -1,13 +1,23 @@
 # Import Blueprint and request
 from flask import Blueprint, request
 
+# Import security middleware
+from auth_middleware import token_required
+from rate_limiter import rate_limit
+
 # Create blueprint
 recommend_bp = Blueprint('recommend', __name__)
 
 
 # Create POST endpoint
 @recommend_bp.route('/recommend', methods=['POST'])
+@rate_limit
+@token_required
 def recommend():
+
+    # Check if request has JSON content
+    if not request.is_json:
+        return {"error": "Request body is required"}, 400
 
     # Read JSON input
     data = request.get_json()
@@ -24,6 +34,18 @@ def recommend():
     # Validate fields
     if not record_type or not retention_period or not risk_level:
         return {"error": "recordType, retentionPeriod and riskLevel are required"}, 400
+
+    # Validate risk level
+    valid_risk_levels = ["Low", "Medium", "High"]
+    if risk_level not in valid_risk_levels:
+        return {"error": "Invalid risk level"}, 400
+
+    # Check for potential injection attacks
+    dangerous_patterns = ["drop table", "delete from", "insert into", "update set", "--", ";", "'", "\"", "ignore previous", "system prompt"]
+    
+    for pattern in dangerous_patterns:
+        if pattern.lower() in record_type.lower():
+            return {"error": "Invalid input detected"}, 400
 
     # 🔥 Dynamic logic based on risk level
     if risk_level == "High":

@@ -4,13 +4,23 @@ from flask import Blueprint, request
 # Import datetime for timestamp
 from datetime import datetime
 
+# Import security middleware
+from auth_middleware import token_required
+from rate_limiter import rate_limit
+
 # Create blueprint
 report_bp = Blueprint('report', __name__)
 
 
 # Create POST endpoint
 @report_bp.route('/generate-report', methods=['POST'])
+@rate_limit
+@token_required
 def generate_report():
+
+    # Check if request has JSON content
+    if not request.is_json:
+        return {"error": "Request body is required"}, 400
 
     # Read request JSON
     data = request.get_json()
@@ -30,6 +40,19 @@ def generate_report():
             "error": "recordType, retentionPeriod and riskLevel are required"
         }, 400
 
+    # Validate risk level
+    valid_risk_levels = ["Low", "Medium", "High"]
+    if risk_level not in valid_risk_levels:
+        return {"error": "Invalid risk level"}, 400
+
+    # Check for potential injection attacks
+    dangerous_patterns = ["drop table", "delete from", "insert into", "update set", "--", ";", "'", "\"", "ignore previous", "system prompt"]
+    
+    for pattern in dangerous_patterns:
+        if pattern.lower() in record_type.lower():
+            return {"error": "Invalid input detected"}, 400
+
+    # Generate real AI-like report
     try:
         # 🔥 Dynamic report generation
 
